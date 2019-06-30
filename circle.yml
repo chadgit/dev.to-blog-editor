@@ -1,0 +1,85 @@
+
+version: 2
+jobs:
+  test:
+    docker:
+      - image: "node:8.9.3"
+
+    working_directory: ~/repo
+
+    steps:
+      - checkout
+      - restore_cache:
+          key: v1-electron-react-app-test-{{ checksum "package-lock.json" }}
+      - run: yarn global add npm@5
+      - run: npm install
+      - save_cache:
+          key: v1-electron-react-app-test-{{ checksum "package-lock.json" }}
+          paths:
+            - "~/.npm"
+            - "node_modules"
+      - run: npm test
+      - run: cat ./coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js
+      - store_test_results:
+          path: coverage
+
+  build:
+    docker:
+      - image: "node:8.9.3"
+
+    working_directory: ~/repo
+
+    steps:
+      - checkout
+      - restore_cache:
+          key: v1-electron-react-app-build-{{ checksum "package.json" }}
+      - run: yarn global add npm@5
+      - run: npm install
+      - run: dpkg --add-architecture i386
+      - run: apt update
+      - run: apt install -y zip wine wine32
+      - run: WINEARCH=win32 winecfg
+      - run: npm run build
+      - save_cache:
+          key: v1-electron-react-app-build-{{ checksum "package.json" }}
+          paths:
+            - "~/.npm"
+            - "intermediates"
+            - "node_modules"
+            - "/var/cache/apt/"
+      - run:
+          command: zip -r --symlinks win32.zip win32
+          working_directory: ./output
+      - run:
+          command: zip -r --symlinks win64.zip win64
+          working_directory: ./output
+      - run:
+          command: zip -r --symlinks darwin.zip darwin
+          working_directory: ./output
+      - run:
+          command: zip -r --symlinks linux32.zip linux32
+          working_directory: ./output
+      - run:
+          command: zip -r --symlinks linux64.zip linux64
+          working_directory: ./output
+      - store_artifacts:
+          path: output/win32.zip
+          destination: win32.zip
+      - store_artifacts:
+          path: output/win64.zip
+          destination: win64.zip
+      - store_artifacts:
+          path: output/darwin.zip
+          destination: darwin.zip
+      - store_artifacts:
+          path: output/linux32.zip
+          destination: linux32.zip
+      - store_artifacts:
+          path: output/linux64.zip
+          destination: linux64.zip
+workflows:
+  version: 2
+  test_and_build:
+    jobs:
+      - test
+      - build
